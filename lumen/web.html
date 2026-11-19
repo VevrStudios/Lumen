@@ -1,0 +1,962 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lumen</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Crect width='120' height='120' rx='26' fill='%231a1418'/%3E%3Cg style='mix-blend-mode:screen'%3E%3Ccircle cx='52' cy='54' r='20' fill='%23f06aa8'/%3E%3Ccircle cx='68' cy='54' r='20' fill='%23a16ae0'/%3E%3Ccircle cx='64' cy='68' r='20' fill='%23f0684e'/%3E%3Ccircle cx='54' cy='66' r='20' fill='%23f2b04a'/%3E%3C/g%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+*{box-sizing:border-box}
+:root{color-scheme:dark}
+html,body{margin:0;height:100%;background:oklch(0.155 0.008 320)}
+select option{background:oklch(0.215 0.012 320);color:oklch(0.95 0.006 320)}
+body{color:oklch(0.95 0.006 320);font-family:'Figtree',system-ui,sans-serif;-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums}
+textarea::placeholder{color:oklch(0.63 0.012 320)}
+button:disabled{cursor:default!important}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background:oklch(1 0 0 / 0.09);border-radius:8px}
+::-webkit-scrollbar-track{background:transparent}
+.hv4:hover{box-shadow:inset 0 0 0 100px oklch(1 0 0 / 0.04)!important}
+.hv5:hover{box-shadow:inset 0 0 0 100px oklch(1 0 0 / 0.05)!important}
+.hvRed:hover{background:oklch(0.68 0.17 25)!important;color:oklch(0.17 0.01 320)!important}
+.hvHandle:hover{background:oklch(1 0 0 / 0.035)!important}
+.hvPlus:hover{background:oklch(1 0 0 / 0.11)!important}
+.hvLook:hover{background:oklch(0.86 0.13 95 / 0.2)!important}
+@keyframes animRise{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:none}}
+@keyframes animFade{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+@keyframes animFloat{0%,100%{transform:translate(0,0)}33%{transform:translate(9%,-7%)}66%{transform:translate(-7%,8%)}}
+@keyframes animHop{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-75%)}}
+@keyframes animBreath{0%,100%{transform:scale(1);opacity:.7}50%{transform:scale(1.25);opacity:1}}
+@keyframes animPulse{0%,100%{opacity:1;transform:translateY(0)}50%{opacity:.35;transform:translateY(-3px)}}
+@keyframes animLevel{0%,100%{transform:scale(.7)}30%{transform:scale(1.3)}55%{transform:scale(.85)}80%{transform:scale(1.15)}}
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script type="module">
+import { html, render, Component } from "/preact.js";
+
+const C = { ink: "oklch(0.95 0.006 320)", dim: "oklch(0.78 0.01 320)", faint: "oklch(0.63 0.012 320)", dark: "oklch(0.17 0.01 320)" };
+const A = { bot: [0.76, 0.15, 355], me: [0.72, 0.14, 305], mem: [0.70, 0.14, 280], ohr: [0.68, 0.17, 25], gast: [0.76, 0.13, 50], code: [0.80, 0.13, 72], auge: [0.86, 0.13, 95] };
+const col = (k, a) => { const [l, c, h] = A[k]; return a == null ? `oklch(${l} ${c} ${h})` : `oklch(${l} ${c} ${h} / ${a})`; };
+const soft = (k) => { const [l, c, h] = A[k]; return `oklch(${Math.min(l + 0.08, 0.93).toFixed(2)} ${(c * 0.78).toFixed(3)} ${h})`; };
+
+// Werkzeug -> Filter der Aktivitaet. Die Verben selbst kommen vom Server (web._VERB).
+const CAT = { Read: "lesen", Grep: "lesen", Glob: "lesen", WebSearch: "lesen", WebFetch: "lesen",
+  Write: "schreiben", Edit: "schreiben", MultiEdit: "schreiben",
+  screenshot: "bildschirm", hinsehen: "bildschirm",
+  open: "steuern", schreiben: "steuern" };
+const CATK = { lesen: "gast", schreiben: "mem", bildschirm: "auge", steuern: "ohr", sonst: "bot" };
+const VIA = { getippt: "Fenster", gesprochen: "gesprochen", discord: "DM" };  // durch tr()
+const W0 = { notes: 320, act: 300 };
+const KEY_W = "lumen-spalten", KEY_COLS = "lumen-sichtbar";
+// Die Schalter in den Einstellungen. Die Vorgaben und die Grenze stehen im Code (mode.FEATURES,
+// guard.FEATURE_OF) -- hier nur, wie sie heissen und was sie tun.
+const FEATURES = [
+  ["watch", "Beobachten", "Sieht ab und zu nach, welches Programm vorne ist, und darf Bildschirmfotos machen. Hilft beim Dranbleiben."],
+  ["open", "Programme öffnen", "Darf Programme starten und Adressen im Browser öffnen."],
+  ["discord", "Discord", "DMs über deinen eigenen Bot: du schreibst ihm, er antwortet dort und meldet sich auch von selbst."],
+];
+const IMG = /\.(png|jpe?g|gif|webp|bmp)$/i;
+const LOOK = "Schau dir meinen Bildschirm an.";
+
+// Die Wörter des Fensters. Deutsch ist der Quelltext; eine andere Sprache bringt ihre
+// Tabelle mit jedem /state mit (lang/<sprache>.UI), und was darin fehlt, bleibt deutsch.
+let UI = {};
+const tr = (de, vals) => {
+  let s = UI[de] || de;
+  for (const k in vals || {}) s = s.split("{" + k + "}").join(vals[k]);
+  return s;
+};
+const VOICE_LABEL = { female: "weiblich", male: "männlich" };
+
+const pad = (n) => String(n).padStart(2, "0");
+const clock = (iso) => { if (!iso) return ""; const d = new Date(iso); return pad(d.getHours()) + ":" + pad(d.getMinutes()); };
+const day = (iso) => { if (!iso) return ""; const d = new Date(iso); return pad(d.getDate()) + "." + pad(d.getMonth() + 1) + "."; };
+// Heute nur die Uhrzeit, aeltere Eintraege mit Datum -- die Liste reicht eine Woche zurueck.
+const when = (iso) => !iso ? "" : new Date(iso).toDateString() === new Date().toDateString() ? clock(iso) : day(iso) + " " + clock(iso);
+const minsLeft = (iso) => Math.max(1, Math.ceil((new Date(iso) - Date.now()) / 60000));
+const minsSince = (iso) => Math.max(0, Math.floor((Date.now() - new Date(iso)) / 60000));
+const load = (k, ok, d) => { try { const v = JSON.parse(localStorage.getItem(k) || "null"); if (v && ok(v)) return v; } catch {} return d; };
+const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+const fmtSize = (b) => b < 1024 ? b + " B" : b < 1048576 ? (b / 1024).toFixed(1).replace(".", ",") + " KB" : (b / 1048576).toFixed(1).replace(".", ",") + " MB";
+const extOf = (name) => name.includes(".") ? name.split(".").pop().slice(0, 4).toUpperCase() : tr("DATEI");
+
+// "[Anhang: C:\...\data\dm\web_1730_bild.png]" -- so landet ein Anhang im Faden, aus der
+// DM wie aus dem Fenster. Fuers Anzeigen wieder auseinandernehmen.
+function splitAsked(asked) {
+  const att = [], text = [];
+  for (const line of (asked || "").split("\n")) {
+    const m = /^\[(?:Anhang|Attachment): (.+)\]$/.exec(line.trim());
+    if (!m) { text.push(line); continue; }
+    const file = m[1].split(/[\\/]/).pop(), name = file.replace(/^(web_)?\d+_/, "");
+    att.push({ id: file, name, ext: extOf(name), kind: IMG.test(file) ? "img" : "file", url: "/file/" + encodeURIComponent(file) });
+  }
+  return { text: text.join("\n").trim(), att };
+}
+
+function orb(size, mode) {
+  const cols = ["oklch(0.74 0.18 355)", "oklch(0.66 0.19 305)", "oklch(0.70 0.18 25)", "oklch(0.84 0.15 75)"];
+  const rest = [[-0.13, -0.09], [0.13, -0.07], [0.09, 0.13], [-0.11, 0.11]], row = [-0.39, -0.13, 0.13, 0.39];
+  const d = Math.round(size * 0.66), o = (size - d) / 2;
+  return html`<span style="position:relative;display:block;width:${size}px;height:${size}px;flex:none;isolation:isolate">
+    ${cols.map((c, i) => {
+      const think = mode === "think";
+      const x = think ? row[i] * size : rest[i][0] * size, y = think ? 0 : rest[i][1] * size, s = think ? 0.34 : mode === "listen" ? 0.92 : 1;
+      let anim = "none";
+      if (mode === "think") anim = `animHop 1s ease-in-out ${i * 0.13}s infinite`;
+      else if (mode === "listen") anim = `animLevel .9s ease-in-out ${i * 0.11}s infinite`;
+      else if (mode === "idle") anim = `animFloat ${6 + i * 1.3}s ease-in-out ${-i * 1.7}s infinite`;
+      const off = mode === "off";
+      return html`<span key=${i} style="position:absolute;left:${o}px;top:${o}px;width:${d}px;height:${d}px;transform:translate(${x.toFixed(1)}px,${y.toFixed(1)}px) scale(${s});transition:transform .55s cubic-bezier(.3,1.4,.5,1)">
+        <span style="display:block;width:100%;height:100%;border-radius:50%;background:${off ? "oklch(0.42 0.005 320)" : c};mix-blend-mode:screen;opacity:${off ? 0.6 : 0.92};box-shadow:${off ? "none" : `0 0 ${Math.round(size * 0.32)}px ${c}`};transition:background .6s,box-shadow .6s;animation:${anim}"></span>
+      </span>`;
+    })}
+  </span>`;
+}
+
+const dots = (k) => html`<span style="display:flex;gap:4px;align-items:center;height:10px">
+  ${[0, 1, 2].map((i) => html`<span key=${i} style="width:5px;height:5px;border-radius:50%;background:${col(k)};animation:animPulse 1.2s ease-in-out ${i * 0.15}s infinite"></span>`)}
+</span>`;
+
+function earIcon(kind) {
+  const dot = (size, extra) => html`<span style="display:block;width:${size}px;height:${size}px;border-radius:50%;background:${col("ohr")};${extra}"></span>`;
+  if (kind === "rec") return dot(11, "animation:animLevel .9s ease-in-out infinite");
+  if (kind === "pause") return dot(10, "opacity:.55");
+  if (kind === "busy") return dot(10, "animation:animBreath 1s ease-in-out infinite");
+  if (kind === "ready") return dot(8, "animation:animBreath 2.8s ease-in-out infinite");
+  return html`<span style="display:block;width:8px;height:8px;border-radius:50%;background:${C.faint}"></span>`;
+}
+
+// Ihr Markdown, soweit sie es schreibt: **fett**, *kursiv*, `code`, ~~durch~~, # Ueberschrift.
+// Als Elemente, nie als innerHTML -- der Text kommt auch von Gaesten aus der DM.
+const MD = /(\*\*[^\n]+?\*\*|__[^\s_][^\n]*?__|~~[^\n]+?~~|`[^`\n]+`|\*[^\s*][^\n*]*?\*)/;
+function inline(text) {
+  return text.split(MD).map((p, i) => {
+    if (i % 2 === 0) return p;
+    if (p.startsWith("**") || p.startsWith("__")) return html`<strong style="font-weight:700">${inline(p.slice(2, -2))}</strong>`;
+    if (p.startsWith("~~")) return html`<s>${inline(p.slice(2, -2))}</s>`;
+    if (p.startsWith("`")) return html`<code style="font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:.9em;padding:1px 5px;border-radius:6px;background:oklch(1 0 0 / 0.08)">${p.slice(1, -1)}</code>`;
+    return html`<em>${inline(p.slice(1, -1))}</em>`;
+  });
+}
+const fmt = (text) => (text || "").split("\n").map((line, i) => {
+  const h = /^#{1,6}\s+(.*)$/.exec(line);
+  return [i ? "\n" : "", h ? html`<strong style="font-weight:700">${inline(h[1])}</strong>` : inline(line)];
+});
+
+const img = (url, name, style) => url ? html`<img src=${url} alt=${name} style="display:block;${style}" />` : null;
+
+// Welche Farbe eine Notiz traegt, aus dem, was sie gesehen hat.
+function thoughtKey(saw) {
+  const s = (saw || []).join(" ");
+  if (/^(wecker|alarm)/i.test(s)) return "gast";
+  if (/Merken|Schreiblauf/.test(s)) return "mem";
+  return "auge";
+}
+
+function actKey(a) {
+  if (a.job === "remember") return "mem";
+  const l = a.label || "";
+  if (l === tr("Blick")) return "auge";
+  if (l === tr("Wecker")) return "gast";
+  return "bot";
+}
+const actLabel = (a) => a.job === "remember" ? tr("Merken · ins Gedächtnis eintragen") : a.label || tr("Zug");
+
+// Toast unten rechts, sobald sie einen Gedanken schreibt -- damit das Fenster minimiert
+// sein darf und er trotzdem mitbekommt, dass sie hinsieht. Nur wenn die Seite versteckt
+// ist: steht sie offen, liest er die Notizen ohnehin.
+// shortcut: haengt am Poll, und ein verstecktes Tab drosselt der Browser auf einmal pro
+// Minute -- der Toast kann bis zu 60 s hinterherhinken. Stoert das, /state als Long-Poll.
+let lastThought = null, lastToast = null;
+function toastThought(entries) {
+  const newest = entries.length ? entries[entries.length - 1] : null;
+  const at = newest ? newest.at : "", known = lastThought;
+  lastThought = at;
+  if (known === null || at === known || !newest || !newest.thought) return;
+  if (!document.hidden || !window.Notification || Notification.permission !== "granted") return;
+  try {
+    // Eigener tag je Gedanke: unter demselben tag ersetzt Windows die Meldung, und ein
+    // Ersetzen ploppt nicht wieder auf (gemessen 17.09.2026). Die vorige selbst schliessen.
+    if (lastToast) lastToast.close();
+    lastToast = new Notification((newest.saw || []).join(" · ") || document.title, { body: newest.thought, tag: newest.at });
+    lastToast.onclick = () => window.focus();
+  } catch {}
+}
+function askNotify() {
+  // Chrome unterdrueckt die Frage ohne Klick, darum beim Laden *und* beim ersten Klick.
+  if (window.Notification && Notification.permission === "default") { try { Notification.requestPermission(); } catch {} }
+}
+
+const post = (path, body) => fetch(path, { method: "POST", body: body === undefined ? undefined : typeof body === "string" ? body : JSON.stringify(body) });
+
+class App extends Component {
+  state = {
+    s: null, off: false, stopping: false, confirm: false,
+    draft: "", focus: false, filter: "alle",
+    w: load(KEY_W, (v) => v.notes && v.act, { ...W0 }), drag: null,
+    cols: load(KEY_COLS, (v) => typeof v.notes === "boolean", { notes: true, act: true }),
+    pending: null, pendingSent: "", pendingAt: "", pendingAtt: [],
+    att: [], dropOver: false, lightbox: null, ptt: false, merken: false,
+    // Einstellungen: offen?, die Eingaben darin, und was der Server zuletzt dazu sagte.
+    setup: false, nameDraft: null, botDraft: null, keyDraft: "", regionDraft: null, tokenDraft: "", userDraft: null,
+    setupMsg: "", setupBusy: false, deep: false,
+  };
+  askedSetup = false;  // beim allerersten Start einmal von selbst aufmachen
+  firstSeen = new Map();  // key -> wann zuerst gezeichnet; nur Neues steigt animiert auf
+  loaded = false;
+  nextId = 1;
+
+  componentDidMount() {
+    this.poll();
+    this.kd = (e) => {
+      if (e.key !== "Escape") return;
+      if (this.state.lightbox) this.setState({ lightbox: null });
+      else if (this.state.setup) this.closeSetup();
+      else if (this.state.confirm) this.setState({ confirm: false });
+    };
+    window.addEventListener("keydown", this.kd);
+    askNotify();
+    document.addEventListener("click", askNotify, { once: true });
+  }
+
+  componentDidUpdate() {
+    // Neue Blase, neuer Status, anderer Chat: immer nach unten.
+    // Ohne smooth: ein weiches Scrollen zielt auf die Hoehe von eben, und was danach noch
+    // waechst -- ein Bild, das nachlaedt -- blieb darunter liegen.
+    if (!this.scrollKey || this.scrollKey === this._lastKey) return;
+    this._lastKey = this.scrollKey;
+    this.pinned = true;
+    if (this.stream) this.stream.scrollTop = this.stream.scrollHeight;
+  }
+
+  // Haelt den Chat unten, solange er nicht selbst hochgescrollt hat: auch wenn Inhalt spaeter
+  // waechst (Bilder, Schrift) oder die Eingabe hoeher wird und den Chat kleiner macht.
+  stick = (el) => {
+    if (el === this.stream) return;
+    if (this.ro) this.ro.disconnect();
+    this.stream = el; this.pinned = true;
+    if (!el) return;
+    el.onscroll = () => { this.pinned = el.scrollHeight - el.scrollTop - el.clientHeight < 40; };
+    this.ro = new ResizeObserver(() => { if (this.pinned) el.scrollTop = el.scrollHeight; });
+    this.ro.observe(el); this.ro.observe(el.firstElementChild);
+  };
+
+  async poll() {
+    let wait = 2000;
+    try {
+      const s = await (await fetch("/state")).json();
+      UI = s.ui || {};
+      document.documentElement.lang = (s.settings || {}).language || "en";
+      const patch = { s, off: false };
+      // Seine Antwort erkennt sie am Zug selbst, nicht an der Laenge der Liste: die ist
+      // gedeckelt und waechst ab dem 60. Zug nie mehr -- daran blieb "denkt nach" haengen.
+      const st = this.state;
+      if (st.pending != null && (s.chat || []).some((e) => e.at > st.pendingAt && e.asked === st.pendingSent)) {
+        patch.pending = null; patch.pendingAtt = [];
+      }
+      if (!this.askedSetup && s.settings && !s.settings.welcomed) { this.askedSetup = true; patch.setup = true; }
+      this.setState(patch);
+      toastThought(s.thoughts || []);
+      wait = s.poll_ms || 1500;
+    } catch {
+      this.setState({ off: true });
+    }
+    setTimeout(() => this.poll(), wait);
+  }
+
+  lastStep() {
+    const d = this.state.s && this.state.s.denkt;
+    if (!d || !d.busy || !d.steps.length) return "";
+    const x = d.steps[d.steps.length - 1];
+    return (x.verb + " " + x.on).trim();
+  }
+  fresh(key) {
+    if (!this.firstSeen.has(key)) this.firstSeen.set(key, this.loaded ? Date.now() : 0);
+    return Date.now() - this.firstSeen.get(key) < 1200;
+  }
+
+  // --- Eingaben ---------------------------------------------------------------------
+
+  async send(text, withAtt) {
+    const st = this.state;
+    text = (text || "").trim();
+    const att = withAtt ? st.att : [];
+    if ((!text && !att.length) || st.off) return;
+    // Erst zeichnen, dann schicken: die eigene Zeile gehoert in den Chat, sobald Enter
+    // gedrueckt ist, nicht erst wenn die Antwort fertig ist.
+    const before = st.s.chat || [];
+    this.setState({ pending: text, pendingAtt: att,
+      pendingAt: before.length ? before[before.length - 1].at : "",
+      ...(withAtt ? { draft: "", att: [] } : {}) });
+    const lines = [];
+    for (const a of att) {
+      try {
+        const r = await (await fetch("/upload?name=" + encodeURIComponent(a.name), { method: "POST", body: a.file })).json();
+        lines.push(r.ok ? `[${tr("Anhang")}: ${r.path}]` : `[${tr("Anhang")} ${a.name}: ${tr("zu groß -- nicht geladen")}]`);
+      } catch { lines.push(`[${tr("Anhang")} ${a.name}: ${tr("ließ sich nicht laden")}]`); }
+    }
+    const sent = [text, ...lines].filter(Boolean).join("\n");
+    this.setState({ pendingSent: sent });
+    await post("/say", { text: sent, deep: st.deep });
+    if (st.deep) this.setState({ deep: false });  // gilt für genau eine Antwort
+  }
+
+  // --- Einstellungen ----------------------------------------------------------------
+
+  async configure(body) {
+    // Der Server prueft und speichert; das Fenster zeigt nur, was zurueckkommt.
+    this.setState({ setupBusy: true, setupMsg: "" });
+    try {
+      const r = await (await post("/settings", body)).json();
+      const s = { ...this.state.s, settings: r.settings };
+      this.setState({ s, setupBusy: false, setupMsg: r.ok ? "" : r.why,
+        ...(r.ok && (body.azure_key || body.azure_region || body.azure_clear) ? { keyDraft: "", regionDraft: null } : {}),
+        ...(r.ok && body.name != null ? { nameDraft: null } : {}),
+        ...(r.ok && body.assistant != null ? { botDraft: null } : {}),
+        ...(r.ok && (body.discord_token || body.discord_user || body.discord_clear) ? { tokenDraft: "", userDraft: null } : {}) });
+    } catch { this.setState({ setupBusy: false, setupMsg: tr("Keine Verbindung.") }); }
+  }
+
+  async closeSetup() {
+    // Was in den Namensfeldern steht, gilt beim Schliessen als gespeichert -- sonst ging ein
+    // getippter Name mit "Fertig" still verloren. Lehnt der Server ab, bleibt das Fenster offen.
+    const st = this.state, body = {};
+    if (st.botDraft != null) body.assistant = st.botDraft.trim();
+    if (st.nameDraft != null) body.name = st.nameDraft;
+    if (!(st.s.settings || {}).welcomed) body.welcomed = true;  // von selbst nur beim ersten Start
+    if (Object.keys(body).length) await this.configure(body);
+    if (!this.state.setupMsg) this.setState({ setup: false });
+  }
+
+  async desktop() {
+    this.setState({ setupBusy: true, setupMsg: "" });
+    try {
+      const r = await (await post("/desktop")).json();
+      this.setState({ setupBusy: false, desktopDone: r.ok, setupMsg: r.ok ? "" : r.why });
+    } catch { this.setState({ setupBusy: false, setupMsg: tr("Keine Verbindung.") }); }
+  }
+
+  async voiceTest() {
+    this.setState({ setupBusy: true, setupMsg: "" });
+    try {
+      const r = await (await post("/voicetest")).json();
+      this.setState({ setupBusy: false, setupMsg: r.ok ? "" : tr("Kein Ton — Schlüssel oder Region stimmen nicht (Details im Log).") });
+    } catch { this.setState({ setupBusy: false, setupMsg: tr("Keine Verbindung.") }); }
+  }
+
+  addFiles(list) {
+    const fs = Array.from(list || []);
+    if (!fs.length) return;
+    const add = fs.slice(0, 10).map((f) => {
+      const isImg = /^image\//.test(f.type || ""), name = f.name || (isImg ? tr("Bild") + ".png" : tr("Datei"));
+      return { id: "a" + this.nextId++, file: f, name, size: fmtSize(f.size || 0), ext: extOf(name), kind: isImg ? "img" : "file", url: isImg ? URL.createObjectURL(f) : "" };
+    });
+    this.setState((s) => ({ att: [...s.att, ...add].slice(0, 10), dropOver: false }));
+  }
+  removeAtt(id) {
+    this.setState((s) => { const a = s.att.find((x) => x.id === id); if (a && a.url) URL.revokeObjectURL(a.url); return { att: s.att.filter((x) => x.id !== id) }; });
+  }
+
+  ptt(down) {
+    if (this.state.ptt === down) return;
+    this.setState({ ptt: down });
+    post("/ptt", { down });
+  }
+
+  flip(k) {
+    const m = this.state.s.mode;
+    // Beide Schalter leben in mode.py. Das Fenster kippt sie nur, ohne eigene Kopie.
+    if (k === "blind") post("/mode", { blind: m.blind ? 0 : 30 });
+    if (k === "convo") post("/mode", { convo: m.convo ? 0 : 30 });
+    if (k === "test") post("/mode", { test: m.testing ? 0 : 120 });
+    if (k === "deaf") post("/mode", { deaf: !m.deaf });
+    if (k === "muted") post("/mode", { muted: !m.muted });
+  }
+
+  remember() {
+    // Kein Bestaetigen: der Lauf laeuft ohnehin bei jedem Sitzungsstart, und ein schlechter
+    // Eintrag hat einen Rueckweg. Kurz gesperrt, damit nicht zwei Auftraege anstehen.
+    this.setState({ merken: true, filter: "alle" });
+    post("/remember");
+    setTimeout(() => this.setState({ merken: false }), 5000);
+  }
+
+  startDrag(k, e) {
+    if (e.button != null && e.button !== 0) return;
+    e.preventDefault();
+    const x0 = e.clientX, w0 = this.state.w[k], body = document.body, sel = body.style.userSelect, cur = body.style.cursor;
+    body.style.userSelect = "none"; body.style.cursor = "col-resize";
+    this.setState({ drag: k });
+    const mv = (ev) => { const w = Math.round(Math.min(720, Math.max(240, w0 - (ev.clientX - x0)))); this.setState((s) => ({ w: { ...s.w, [k]: w } })); };
+    const up = () => {
+      window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up);
+      body.style.userSelect = sel; body.style.cursor = cur;
+      this.setState({ drag: null }, () => save(KEY_W, this.state.w));
+    };
+    window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
+  }
+  resetW(k) { this.setState((s) => ({ w: { ...s.w, [k]: W0[k] } }), () => save(KEY_W, this.state.w)); }
+  toggleCol(k) { this.setState((s) => ({ cols: { ...s.cols, [k]: !s.cols[k] } }), () => save(KEY_COLS, this.state.cols)); }
+
+  // --- Zeichnen ---------------------------------------------------------------------
+
+  render() {
+    const st = this.state, s = st.s;
+    if (!s) return html`<div style="height:100vh;display:grid;place-items:center;color:${C.faint}">${st.off ? tr("kein Kontakt — ist das Programm gestartet? (start.vbs)") : tr("verbinde…")}</div>`;
+    const riseAnim = "animRise .55s cubic-bezier(.2,1.2,.4,1) both", fadeAnim = "animFade .4s ease-out both";
+    const off = st.off, md = s.mode, until = md.until || {}, d = s.denkt || {};
+    const busy = !!d.busy && !off, remembering = busy && d.job === "remember";
+    const cfg = s.settings || {}, F = cfg.features || {}, me = cfg.owner || tr("du"), bot = cfg.assistant || "";
+    if (bot && document.title !== bot) document.title = bot;
+    const seenApp = ((s.gesehen || {}).app || "").replace(/\.exe$/i, "");
+
+    // Sein Mikrofon, damit Stille lesbar wird: nimmt sie auf, versteht sie gerade, und
+    // ging das Letzte an sie? (28.09.2026)
+    const E = { aus: ["off", cfg.whisper ? tr("Mikrofon zu") : tr("Whisper fehlt — tools\\install-whisper.ps1 ausführen")], taub: ["off", tr("Mikro aus — nur die Sprechtaste geht durch")], bereit: ["ready", tr("hört mit — sag „{bot}“", { bot })], hoert: ["rec", tr("nimmt auf…")], taste: ["rec", tr("Sprechtaste — nimmt auf, bis du loslässt")], versteht: ["busy", tr("versteht…")] };
+    const ear = off || !F.ear ? null : s.ohr;
+    let earKind = "off", earText = "";
+    if (ear) {
+      [earKind, earText] = E[ear.zustand] || ["off", ear.zustand];
+      if (ear.zustand === "bereit" && md.convo) earText = tr("hört durchgehend zu, auch ohne „{bot}“", { bot });
+      if (ear.zustand === "hoert" && ear.ende_in != null) { earKind = "pause"; earText = tr("Pause — schickt in {s} s, wenn du nicht weiterredest", { s: ear.ende_in }); }
+      if (ear.versteht && ear.zustand !== "versteht") earText += " · " + tr("versteht das Vorige…");
+    }
+    const earLive = earKind === "rec" || earKind === "pause" || earKind === "busy";
+    const pttOn = st.ptt || (ear && ear.zustand === "taste");
+    const last = (ear && ear.zuletzt) || {};
+    const heard = last.at && Date.now() - new Date(last.at) < 120000 ? last : null;
+
+    let statusWord, statusColor, statusRest = "";
+    if (off) { statusWord = st.stopping ? tr("beendet") : tr("kein Kontakt"); statusColor = C.faint; statusRest = st.stopping ? "· " + tr("kein Kontakt") : "· " + tr("läuft {bot}?", { bot }); }
+    else if (st.stopping) { statusWord = tr("wird beendet"); statusColor = soft("ohr"); }
+    else if (busy) { statusWord = remembering ? tr("sortiert ins Gedächtnis") : tr("denkt nach"); statusColor = soft(remembering ? "mem" : "bot"); statusRest = F.watch && seenApp ? "· " + seenApp : ""; }
+    else if (!F.watch) { statusWord = tr("bereit"); statusColor = soft("bot"); statusRest = "· " + tr("Beobachten aus"); }
+    else if (md.blind) { statusWord = tr("sieht nicht hin"); statusColor = soft("auge"); statusRest = "· " + tr("nur Programm:") + " " + seenApp; }
+    else if ((s.gesehen || {}).at) { statusWord = tr("sieht zu"); statusColor = soft("bot"); statusRest = "· " + tr("zuletzt") + " " + clock(s.gesehen.at) + (seenApp ? " · " + seenApp : ""); }
+    else { statusWord = tr("sieht nichts"); statusColor = C.faint; statusRest = "· " + tr("der Beobachter läuft nicht"); }
+
+    // Nur die Schalter, deren Funktion an ist: "Nicht zugucken" ohne Beobachten waere ein
+    // Knopf, der nichts tut.
+    const defs = [
+      F.watch && { g: 0, k: "auge", id: "blind", label: tr("Nicht zugucken"), on: md.blind, rest: md.blind && until.blind_until ? minsLeft(until.blind_until) + " min" : "", title: tr("Kein Bildschirmfoto, keine Fenstertitel — nur welches Programm vorne ist. Für Chats und alles Private. Schaltet sich nach 30 Minuten selbst ab.") },
+      F.ear && { g: 1, k: "ohr", id: "convo", label: tr("Dauerzuhören"), on: md.convo, rest: md.convo && until.convo_until ? minsLeft(until.convo_until) + " min" : "", title: tr("Hört durchgehend zu, ohne dass du „{bot}“ sagen musst. Schaltet sich nach 30 Minuten selbst ab.", { bot }) },
+      F.ear && { g: 1, k: "ohr", id: "deaf", label: tr("Mikro aus"), on: md.deaf, title: tr("Dein Mikrofon aus: nichts kommt mehr an, auch nicht der Name — nur, was du mit gehaltener Sprechtaste sagst. Tippen geht weiter. Nicht dasselbe wie Stumm.") },
+      { g: 2, k: "bot", id: "muted", label: tr("Stumm"), on: md.muted, title: tr("Meldet sich nicht mehr von selbst. Auf Fragen kommt weiter eine Antwort — gesprochen gefragt auch laut.") },
+      { g: 3, k: "mem", id: "test", label: tr("Testlauf"), on: md.testing, rest: md.testing && until.test_until ? minsLeft(until.test_until) + " min" : "", title: tr("Nichts von dem, was jetzt passiert, geht ins Gedächtnis.") },
+    ].filter(Boolean);
+
+    const meBg = "oklch(0.27 0.05 305)";
+    const list = s.chat || [];
+    const ek = ear ? ear.zustand : "";
+    const orbMode = off ? "off" : busy ? "think" : (ek === "hoert" || ek === "taste" || ek === "versteht" || pttOn) ? "listen" : "idle";
+    // Die Denkblase steht im Chat, wenn sie auf eine Nachricht antwortet -- nicht bei einem Blick.
+    const thinkingHere = busy && !remembering && (d.label.startsWith(tr("Antwort an {owner}", { owner: me })) || st.pending != null);
+    const herSaid = (e) => e.said != null && !e.stopped;
+    let lastHer = -1;
+    list.forEach((e, i) => { if (herSaid(e)) lastHer = i; });
+
+    const attVals = (att) => {
+      att = att || [];
+      const imgs = att.filter((a) => a.kind === "img"), files = att.filter((a) => a.kind !== "img"), one = imgs.length === 1;
+      return { imgs: imgs.map((a) => ({ ...a, w: one ? "260px" : "118px", el: img(a.url, a.name, `width:100%;height:${one ? "auto" : "118px"};max-height:${one ? 280 : 118}px;object-fit:cover`) })), files };
+    };
+    const messages = list.map((e, i) => {
+      const key = e.at + "|" + (e.said || "").slice(0, 24);
+      const { text, att } = splitAsked(e.asked);
+      return { key, anim: this.fresh("m" + key) ? riseAnim : "none", opacity: e.testing ? 0.62 : 1,
+        hasAsked: !!e.asked, asked: text, ...attVals(att),
+        orbOp: i === lastHer && !thinkingHere ? 1 : 0, orbScale: i === lastHer && !thinkingHere ? 1 : 0.6, orb: orb(22, i === lastHer ? orbMode : "still"),
+        askName: me, askColor: soft("me"), askBg: meBg,
+        askMeta: [when(e.at), VIA[e.via] && tr(VIA[e.via]), e.deep && "Opus", e.stopped && tr("abgebrochen")].filter(Boolean).join(" · "),
+        hasSaid: herSaid(e), said: e.said || tr("(nichts gesagt)"), saidTime: when(e.at),
+        herBg: !e.asked ? "oklch(0.31 0.05 45)" : "oklch(0.295 0.04 355)", unbidden: !e.asked, testing: !!e.testing, refused: !!e.refused };
+    });
+    if (st.pending != null) messages.push({ key: "p", anim: riseAnim, opacity: 1, hasAsked: true, asked: st.pending, ...attVals(st.pendingAtt),
+      askName: me, askColor: soft("me"), askBg: meBg, askMeta: tr("gesendet"), orbOp: 0, orbScale: 0.6, orb: null, hasSaid: false });
+    const lastStep = this.lastStep();
+    this.scrollKey = [list.length, list.length ? list[list.length - 1].at : "", st.pending != null, thinkingHere, lastStep].join("|");
+
+    const thoughts = (s.thoughts || []).slice().reverse();
+    const thoughtList = thoughts.map((t, i) => {
+      const k = thoughtKey(t.saw), key = "t" + t.at;
+      return { key, sawText: (t.saw || []).join(" · "), time: when(t.at), thought: t.thought || tr("(nichts notiert)"), spoke: !!t.spoke, testing: !!t.testing,
+        dot: col(k), chipFg: soft(k), bg: i === 0 ? col(k, 0.11) : "oklch(1 0 0 / 0.035)", fg: i === 0 ? C.ink : C.dim,
+        anim: this.fresh(key) ? riseAnim : "none", opacity: t.testing ? 0.62 : 1 };
+    });
+
+    // Aktivitaet: was gerade laeuft oben, darunter jeder Zug, in dem sie ein Werkzeug nahm.
+    // Ein stiller Blick ohne Werkzeug ist keine Aktivitaet -- davon gibt es Dutzende am Tag.
+    const fl = st.filter;
+    const fdefs = [["alle", tr("Alle"), null], ["lesen", tr("Lesen"), "gast"], ["schreiben", tr("Schreiben"), "mem"], ["bildschirm", tr("Bildschirm"), "auge"], ["steuern", tr("Steuern"), "ohr"]];
+    const acts = (s.acts || []).filter((a) => a.steps.length).map((a) => ({ ...a, live: false }));
+    if (busy) acts.push({ at: d.since, job: d.job, label: d.label, steps: d.steps, live: true, testing: md.testing });
+    const actList = acts.slice().reverse().map((g) => ({ g, steps: g.steps.map((x, si) => ({ x, si })).filter((y) => fl === "alle" || CAT[y.x.tool] === fl) }))
+      .filter((y) => fl === "alle" || y.steps.length).map(({ g, steps }) => {
+        const k = actKey(g), key = "a" + g.at;
+        return { key, live: g.live, bg: g.live ? col(k, 0.12) : "oklch(1 0 0 / 0.035)", anim: this.fresh(key) ? riseAnim : "none", opacity: g.testing ? 0.62 : 1,
+          dot: col(k), labelFg: soft(k), label: actLabel(g), time: when(g.at),
+          steps: steps.map(({ x, si }) => { const sk = CATK[CAT[x.tool] || "sonst"]; return { key: si, anim: g.live ? fadeAnim : "none", dot: col(sk), verbFg: soft(sk), verb: x.verb, on: x.on }; }) };
+      });
+    const lastAct = (s.acts || []).filter((a) => a.steps.length).pop();
+    const actStatus = off ? tr("kein Kontakt") : busy ? tr("gerade:") + " " + (lastStep || actLabel(d)) : lastAct ? tr("zuletzt") + " " + when(lastAct.at) : tr("noch nichts");
+
+    const banner = off && st.stopping ? tr("Beendet. Starten über start.vbs.") : st.stopping ? tr("Wird beendet — der laufende Zug wird noch fertig.") : "";
+    const canSend = (!!st.draft.trim() || st.att.length > 0) && !off;
+    // Solange sie denkt oder redet, ist der Senden-Knopf der Stopp-Knopf -- wie in Claude Code.
+    // Enter schickt weiter. Den Schreiblauf stoppt er nicht (brain.interrupt).
+    const canStop = !off && ((busy && !remembering) || !!s.spricht);
+    const active = busy || earLive || pttOn;
+    const wv = (k) => st.w[k] + "px", hv = (k) => st.drag === k ? col("bot") : "oklch(1 0 0 / 0.12)";
+
+    let theme = ["bot", "gast", 0.14, 0.08];
+    if (off || st.stopping) theme = ["ohr", "ohr", 0.2, 0.12];
+    else if (remembering) theme = ["mem", "mem", 0.2, 0.12];
+    else if (busy) theme = ["me", "bot", 0.2, 0.1];
+    else if (earLive || pttOn) theme = ["gast", "ohr", 0.17, 0.1];
+    else if (md.testing) theme = ["mem", "bot", 0.16, 0.08];
+    else if (md.blind) theme = ["auge", "gast", 0.13, 0.07];
+
+    const placeholder = remembering ? tr("{bot} sortiert gerade ins Gedächtnis und antwortet danach.", { bot }) : tr("Schreib {bot} etwas.", { bot });
+    const pillBox = "background:oklch(0.205 0.01 320 / 0.9);backdrop-filter:blur(14px);box-shadow:0 12px 34px oklch(0.06 0 0 / 0.35),inset 0 0 0 1px oklch(1 0 0 / 0.04)";
+    const panel = "flex:none;height:100%;display:flex;flex-direction:column;border-radius:26px;background:oklch(0.195 0.01 320 / 0.9);box-shadow:0 14px 40px oklch(0.06 0 0 / 0.35),inset 0 0 0 1px oklch(1 0 0 / 0.04);overflow:hidden";
+    const fade = (top) => `mask-image:linear-gradient(to bottom,transparent 0,#000 ${top}px,#000 calc(100% - 18px),transparent 100%)`;
+    const handle = (k) => html`<div class="hvHandle" onPointerDown=${(e) => this.startDrag(k, e)} onDblClick=${() => this.resetW(k)} title=${tr("Ziehen ändert die Breite · Doppelklick setzt zurück")} style="flex:none;width:12px;height:100%;cursor:col-resize;display:grid;place-items:center;touch-action:none;border-radius:6px">
+        <span style="width:3px;height:48px;border-radius:3px;background:${hv(k)};transition:background .2s"></span>
+      </div>`;
+    const label = (t, extra = "") => html`<span style="font-size:12px;font-weight:600;color:${C.faint};${extra}">${t}</span>`;
+    const field = "height:38px;padding:0 14px;border-radius:14px;border:0;background:oklch(1 0 0 / 0.06);color:" + C.ink + ";font:inherit;font-size:13.5px;outline:none;min-width:0";
+    const btn = (bg, fg) => `flex:none;height:36px;padding:0 15px;border-radius:999px;border:0;background:${bg};color:${fg};font:inherit;font-size:13px;font-weight:600;cursor:pointer`;
+
+    this.loaded = true;
+    return html`
+<div style="position:relative;height:100vh;overflow:hidden;background:oklch(0.155 0.008 320);color:${C.ink};font-size:14px;line-height:1.55">
+  <div style="position:absolute;top:-38%;left:-22%;width:76vmax;height:76vmax;border-radius:50%;background-color:${col(theme[0])};opacity:${theme[2]};-webkit-mask-image:radial-gradient(closest-side,#000,transparent);mask-image:radial-gradient(closest-side,#000,transparent);transition:background-color .6s ease,opacity .6s ease;pointer-events:none"></div>
+  <div style="position:absolute;bottom:-44%;right:-24%;width:76vmax;height:76vmax;border-radius:50%;background-color:${col(theme[1])};opacity:${theme[3]};-webkit-mask-image:radial-gradient(closest-side,#000,transparent);mask-image:radial-gradient(closest-side,#000,transparent);transition:background-color .6s ease,opacity .6s ease;pointer-events:none"></div>
+  <div style="position:relative;z-index:1;height:100%;display:flex;flex-direction:column;gap:12px;padding:14px 16px 16px">
+
+    <header style="position:relative;z-index:5;display:flex;align-items:center;gap:10px 14px;flex-wrap:wrap;padding:0 2px">
+      <div style="display:flex;align-items:center;gap:11px;min-width:0">
+        ${orb(30, orbMode)}
+        <div style="display:flex;flex-direction:column;line-height:1.3;min-width:0">
+          <span style="font-size:17px;font-weight:700;letter-spacing:-.01em">${bot}</span>
+          <span style="display:flex;gap:5px;font-size:12.5px;color:${C.dim};white-space:nowrap">
+            <span style="color:${statusColor};font-weight:600;transition:color .6s">${statusWord}</span>
+            <span>${statusRest}</span>
+          </span>
+        </div>
+      </div>
+
+      <div style="flex:1"></div>
+      <button class="hv4" onClick=${() => this.setState({ setup: true, setupMsg: "" })} title=${tr("Name, Stimme, Azure-Konto und welche Funktionen an sind")} style="display:flex;align-items:center;gap:8px;height:42px;padding:0 15px 0 12px;border-radius:999px;border:0;color:${C.ink};font:inherit;font-size:13px;font-weight:600;cursor:pointer;${pillBox}">
+        <span style="width:8px;height:8px;border-radius:50%;background:${cfg.azure ? col("bot") : C.faint}"></span>
+        <span>${tr("Einstellungen")}</span>
+      </button>
+      <div style="display:flex;align-items:center;gap:2px;padding:5px;border-radius:999px;${pillBox}">
+        ${[["notes", tr("Notizen"), tr("Notizen bei Meldungen und Weckern")], ["act", tr("Aktivität"), tr("Welche Werkzeuge gerade benutzt werden")]].map(([k, lbl, t]) => {
+          const on = !!st.cols[k];
+          return html`<button key=${k} class="hv5" title=${(on ? tr("Ausblenden:") : tr("Einblenden:")) + " " + t} onClick=${() => this.toggleCol(k)} style="display:flex;align-items:center;gap:7px;height:32px;padding:0 12px 0 10px;border-radius:999px;border:0;background:${on ? "oklch(1 0 0 / 0.08)" : "transparent"};color:${on ? C.ink : C.faint};font:inherit;font-size:13px;font-weight:${on ? 600 : 500};cursor:pointer;white-space:nowrap;transition:background .3s,color .3s">
+            <span style="width:12px;height:10px;border-radius:3px;box-shadow:inset 0 0 0 1.5px ${on ? C.dim : C.faint};background:${on ? C.dim : "transparent"};transition:background .3s"></span>
+            <span>${lbl}</span>
+          </button>`;
+        })}
+      </div>
+      <nav style="display:flex;align-items:center;gap:2px;flex-wrap:wrap;padding:5px;border-radius:999px;${pillBox};opacity:${off ? 0.4 : 1};pointer-events:${off ? "none" : "auto"};transition:opacity .4s">
+        ${defs.map((t, i) => {
+          const on = !!t.on, k = t.k;
+          return html`<button key=${t.id} class="hv5" title=${t.title} onClick=${() => this.flip(t.id)} style="display:flex;align-items:center;gap:7px;height:32px;margin-left:${i > 0 && defs[i - 1].g !== t.g ? "6px" : "0px"};padding:0 12px 0 10px;border-radius:999px;border:0;background:${on ? col(k, 0.18) : "transparent"};color:${on ? soft(k) : C.dim};font:inherit;font-size:13px;font-weight:${on ? 600 : 500};cursor:pointer;white-space:nowrap;transition:background .4s,color .3s">
+            <span style="width:8px;height:8px;border-radius:50%;flex:none;background:${col(k)};transform:scale(${on ? 1.25 : 0.85});box-shadow:${on ? "0 0 10px " + col(k, 0.8) : "none"};transition:transform .4s,box-shadow .4s"></span>
+            <span>${t.label}</span>
+            ${t.rest && html`<span style="font-size:11.5px;font-weight:500;opacity:.8">${t.rest}</span>`}
+          </button>`;
+        })}
+        <button class="hvRed" disabled=${st.stopping} onClick=${() => this.setState({ confirm: true })} style="height:32px;margin-left:6px;padding:0 13px;border-radius:999px;border:0;background:transparent;color:oklch(0.80 0.13 25);font:inherit;font-size:13px;font-weight:600;cursor:pointer;transition:background .3s,color .3s">${tr("Beenden")}</button>
+      </nav>
+    </header>
+
+    <main style="flex:1;min-height:0;display:flex;gap:0;overflow-x:auto;overflow-y:hidden">
+
+      <section
+        onDragOver=${(e) => { if (off || !Array.from((e.dataTransfer && e.dataTransfer.types) || []).includes("Files")) return; e.preventDefault(); if (!st.dropOver) this.setState({ dropOver: true }); }}
+        onDragLeave=${(e) => { if (!e.currentTarget.contains(e.relatedTarget)) this.setState({ dropOver: false }); }}
+        onDrop=${(e) => { e.preventDefault(); this.setState({ dropOver: false }); if (!off) this.addFiles(e.dataTransfer && e.dataTransfer.files); }}
+        style="position:relative;flex:1 1 0;min-width:380px;height:100%;display:flex;flex-direction:column;gap:10px">
+        ${st.dropOver && html`
+          <div style="position:absolute;inset:0;z-index:4;display:grid;place-items:center;border-radius:28px;background:oklch(0.155 0.008 320 / 0.84);box-shadow:inset 0 0 0 2px ${col(theme[0])};pointer-events:none;animation:${fadeAnim}">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
+              <span style="font-size:16px;font-weight:700;color:${soft(theme[0])}">${tr("Loslassen zum Anhängen")}</span>
+              <span style="font-size:12.5px;color:${C.dim}">${tr("Bilder und Dateien · bis zu 10")}</span>
+            </div>
+          </div>`}
+        ${(remembering || md.testing || banner) && html`
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            ${remembering && html`
+              <span style="display:flex;align-items:center;gap:9px;height:32px;padding:0 14px 0 12px;border-radius:999px;background:oklch(0.70 0.14 280 / 0.16);color:oklch(0.80 0.11 280);font-size:12.5px;font-weight:600;white-space:nowrap;animation:${riseAnim}">
+                ${dots("mem")}
+                <span>${tr("sortiert ins Gedächtnis · antwortet danach")}</span>
+              </span>`}
+            ${md.testing && html`
+              <span style="display:flex;align-items:center;gap:8px;height:32px;padding:0 14px 0 12px;border-radius:999px;background:oklch(0.70 0.14 280 / 0.16);color:oklch(0.80 0.11 280);font-size:12.5px;font-weight:600;white-space:nowrap;animation:${riseAnim}">
+                <span style="width:8px;height:8px;border-radius:50%;background:oklch(0.70 0.14 280)"></span>
+                <span>${tr("Testlauf · nichts kommt ins Gedächtnis")}</span>
+                ${until.test_until && html`<span style="font-weight:500;opacity:.8">noch ${minsLeft(until.test_until)} min</span>`}
+              </span>`}
+            ${banner && html`
+              <span style="display:flex;align-items:center;gap:8px;min-height:32px;padding:4px 14px;border-radius:999px;background:oklch(0.68 0.17 25 / 0.16);color:oklch(0.84 0.11 25);font-size:12.5px;font-weight:600;animation:${riseAnim}">
+                <span>${banner}</span>
+              </span>`}
+          </div>`}
+
+        <div ref=${this.stick} style="flex:1;min-height:0;overflow-y:auto;padding:14px 8px 12px;${fade(22)}">
+          <div style="display:flex;flex-direction:column;gap:18px">
+          ${!messages.length && html`<div style="color:${C.faint};padding:8px">${tr("Noch nichts gesagt.")}</div>`}
+          ${messages.map((m) => html`
+            <div key=${m.key} style="display:flex;flex-direction:column;gap:10px;animation:${m.anim};opacity:${m.opacity}">
+              ${m.hasAsked && html`
+                <div style="align-self:flex-end;max-width:min(80%,600px);display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+                  ${m.imgs.length > 0 && html`
+                    <div style="display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px">
+                      ${m.imgs.map((a) => html`
+                        <button key=${a.id} onClick=${() => this.setState({ lightbox: a })} title=${a.name} style="display:block;width:${a.w};max-width:100%;padding:0;border:0;border-radius:20px;overflow:hidden;background:oklch(1 0 0 / 0.05);cursor:zoom-in">${a.el}</button>`)}
+                    </div>`}
+                  ${m.files.length > 0 && html`
+                    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+                      ${m.files.map((f) => html`
+                        <a key=${f.id} href=${f.url || undefined} target="_blank" style="display:grid;grid-template-columns:36px minmax(0,1fr);gap:10px;align-items:center;width:min(300px,100%);padding:8px 16px 8px 8px;border-radius:18px;background:${m.askBg};color:inherit;text-decoration:none">
+                          <span style="width:36px;height:36px;border-radius:12px;background:oklch(1 0 0 / 0.08);color:${m.askColor};font-size:10.5px;font-weight:700;display:grid;place-items:center">${f.ext}</span>
+                          <span style="display:flex;flex-direction:column;min-width:0;line-height:1.35">
+                            <span style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.name}</span>
+                            ${f.size && html`<span style="font-size:11.5px;color:${C.faint}">${f.size}</span>`}
+                          </span>
+                        </a>`)}
+                    </div>`}
+                  ${m.asked && html`<div style="padding:11px 16px;border-radius:22px 22px 8px 22px;background:${m.askBg};white-space:pre-wrap;overflow-wrap:anywhere;text-wrap:pretty">${fmt(m.asked)}</div>`}
+                  <span style="display:flex;gap:6px;padding:0 10px;font-size:11.5px;color:${C.faint}">
+                    <span style="color:${m.askColor};font-weight:600">${m.askName}</span>
+                    <span>${m.askMeta}</span>
+                  </span>
+                </div>`}
+              ${m.hasSaid && html`
+                <div style="align-self:flex-start;max-width:min(84%,620px);display:flex;gap:10px;align-items:flex-end">
+                  <span style="flex:none;width:22px;height:22px;margin-bottom:24px;opacity:${m.orbOp};transform:scale(${m.orbScale});transition:opacity .9s ease,transform .9s ease">${m.orb}</span>
+                  <div style="display:flex;flex-direction:column;gap:4px;min-width:0">
+                    <div style="padding:11px 16px;border-radius:22px 22px 22px 8px;background:${m.herBg};white-space:pre-wrap;overflow-wrap:anywhere;text-wrap:pretty">${fmt(m.said)}</div>
+                    <span style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:0 10px;font-size:11.5px;color:${C.faint}">
+                      <span style="color:oklch(0.84 0.12 355);font-weight:600">${bot}</span>
+                      <span>${m.saidTime}</span>
+                      ${m.unbidden && html`<span style="color:oklch(0.84 0.11 50);font-weight:600">· ${tr("von sich aus")}</span>`}
+                      ${m.testing && html`<span style="color:oklch(0.80 0.11 280);font-weight:600">· ${tr("Test")}</span>`}
+                      ${m.refused && html`<span style="color:oklch(0.84 0.11 25);font-weight:600">· ${tr("Sicherheitsstopp")}</span>`}
+                    </span>
+                  </div>
+                </div>`}
+            </div>`)}
+          ${thinkingHere && html`
+            <div style="align-self:flex-start;max-width:min(84%,620px);display:flex;gap:10px;align-items:flex-end;animation:${riseAnim}">
+              <span style="flex:none;margin-bottom:6px">${orb(22, "think")}</span>
+              <div style="display:flex;flex-direction:column;gap:4px;min-width:180px;padding:12px 16px;border-radius:22px 22px 22px 8px;background:oklch(0.295 0.04 355)">
+                <div style="display:flex;align-items:center;gap:9px;color:oklch(0.84 0.12 355);font-size:13px;font-weight:600"><span>${tr("denkt nach")}</span></div>
+                ${lastStep && html`<div key=${lastStep} style="font-size:12.5px;color:${C.dim};overflow-wrap:anywhere;animation:${fadeAnim}">${lastStep}</div>`}
+              </div>
+            </div>`}
+          </div>
+        </div>
+
+        <div style="flex:none;position:relative;padding:1.5px;border-radius:28px;box-shadow:${active ? `0 0 34px ${col(theme[0], 0.22)}, 0 14px 36px oklch(0.06 0 0 / 0.35)` : "0 14px 36px oklch(0.06 0 0 / 0.35)"};transition:box-shadow .6s">
+          <div style="position:absolute;inset:0;border-radius:28px;background:oklch(1 0 0 / 0.07)"></div>
+          <div style="position:absolute;inset:0;border-radius:28px;background-color:${col(theme[0])};opacity:${active || off ? 0.9 : st.focus ? 0.6 : 0.3};transition:opacity .4s,background-color .6s"></div>
+          <form onSubmit=${(e) => { e.preventDefault(); this.send(st.draft, true); }} style="position:relative;display:flex;flex-direction:column;gap:2px;padding:10px 10px 10px 18px;border-radius:26.5px;background:oklch(0.195 0.01 320)">
+            ${ear && html`
+              <div style="display:flex;align-items:center;gap:6px 10px;flex-wrap:wrap;padding:2px 0;font-size:12.5px;color:${earLive ? soft("ohr") : C.faint};transition:color .35s">
+                <span style="width:16px;height:16px;flex:none;display:grid;place-items:center">${earIcon(earKind)}</span>
+                <span style="font-weight:${earLive ? 600 : 500}">${earText}</span>
+                ${heard && html`<span style="min-width:0;color:${C.faint};overflow-wrap:anywhere;animation:${fadeAnim}">${heard.stumm
+                  ? clock(heard.at) + ": " + tr("Taste gehalten, aber nichts gehört — Mikro am Gerät stumm?")
+                  : html`${tr("gehört")} ${clock(heard.at)}: „${heard.text}“ → <span style="color:${heard.an_sie ? soft("bot") : C.faint};font-weight:600">${heard.an_sie ? tr("angekommen") : tr("nicht gemeint (kein „{bot}“)", { bot })}</span>`}</span>`}
+              </div>`}
+            ${st.att.length > 0 && html`
+              <div style="display:flex;flex-wrap:wrap;gap:10px;padding:8px 0 4px">
+                ${st.att.map((a) => html`
+                  <div key=${a.id} style="position:relative;animation:${riseAnim}">
+                    ${a.kind === "img" ? html`<span title=${a.name} style="display:block;width:56px;height:56px;border-radius:16px;overflow:hidden;background:oklch(1 0 0 / 0.05)">${img(a.url, a.name, "width:100%;height:100%;object-fit:cover")}</span>` : html`
+                      <div style="display:grid;grid-template-columns:36px minmax(0,1fr);gap:9px;align-items:center;height:56px;max-width:220px;padding:0 14px 0 10px;border-radius:16px;background:oklch(1 0 0 / 0.06)">
+                        <span style="width:36px;height:36px;border-radius:11px;background:oklch(1 0 0 / 0.08);color:oklch(0.84 0.10 305);font-size:10.5px;font-weight:700;display:grid;place-items:center">${a.ext}</span>
+                        <span style="display:flex;flex-direction:column;min-width:0;line-height:1.35">
+                          <span style="font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.name}</span>
+                          <span style="font-size:11.5px;color:${C.faint}">${a.size}</span>
+                        </span>
+                      </div>`}
+                    <button type="button" class="hvRed" onClick=${() => this.removeAtt(a.id)} title=${tr("Entfernen")} style="position:absolute;top:-7px;right:-7px;width:22px;height:22px;border-radius:50%;border:0;background:oklch(0.32 0.012 320);color:${C.ink};font:inherit;font-size:13px;line-height:1;cursor:pointer;box-shadow:0 0 0 2px oklch(0.195 0.01 320)">×</button>
+                  </div>`)}
+              </div>`}
+            <textarea
+              onPaste=${(e) => { const fs = e.clipboardData && e.clipboardData.files; if (fs && fs.length) { e.preventDefault(); this.addFiles(fs); } }}
+              value=${st.draft} onInput=${(e) => this.setState({ draft: e.target.value })}
+              onKeyDown=${(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); this.send(st.draft, true); } }}
+              onFocus=${() => this.setState({ focus: true })} onBlur=${() => this.setState({ focus: false })}
+              placeholder=${placeholder} rows="2" style="resize:none;border:0;background:transparent;color:${C.ink};font:inherit;font-size:14.5px;line-height:1.5;padding:4px 0;min-height:46px;outline:none"></textarea>
+            <div style="display:flex;align-items:center;gap:6px">
+              <input ref=${(el) => { this.fileInput = el; }} type="file" multiple onChange=${(e) => { this.addFiles(e.target.files); e.target.value = ""; }} style="display:none" />
+              <button type="button" class="hvPlus" onClick=${() => this.fileInput && this.fileInput.click()} disabled=${off} title=${tr("Bild oder Datei anhängen — geht auch per Reinziehen oder Einfügen")} style="flex:none;width:32px;height:32px;border-radius:50%;border:0;background:oklch(1 0 0 / 0.06);color:oklch(0.88 0.008 320);font:inherit;font-size:19px;font-weight:500;line-height:1;cursor:pointer;display:grid;place-items:center;transition:background .3s">+</button>
+              ${F.watch && html`
+              <button type="button" class="hvLook" onClick=${() => this.send(tr(LOOK))} disabled=${off} title=${tr("Schickt „Schau dir meinen Bildschirm an.“ — den Blick macht {bot} selbst.", { bot })} style="flex:none;white-space:nowrap;display:flex;align-items:center;gap:7px;height:32px;padding:0 13px 0 11px;border-radius:999px;border:0;background:oklch(0.86 0.13 95 / 0.12);color:oklch(0.92 0.10 95);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;opacity:${off ? 0.5 : 1};transition:background .3s">
+                <span style="width:8px;height:8px;border-radius:50%;background:oklch(0.86 0.13 95)"></span>
+                <span>${tr("Bildschirm ansehen")}</span>
+              </button>`}
+              ${F.ear && html`
+              <button type="button" onPointerDown=${(e) => { e.preventDefault(); this.ptt(true); }} onPointerUp=${() => this.ptt(false)} onPointerLeave=${() => this.ptt(false)} disabled=${off} title=${tr("Halten und sprechen — oder alt+y halten")} style="flex:none;white-space:nowrap;display:flex;align-items:center;gap:7px;height:32px;padding:0 13px 0 11px;border-radius:999px;border:0;background:${pttOn ? col("ohr", 0.3) : col("ohr", 0.12)};color:oklch(0.82 0.12 25);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;user-select:none;transform:scale(${pttOn ? 1.06 : 1});transition:background .3s,transform .4s cubic-bezier(.3,1.6,.5,1)">
+                <span style="width:8px;height:8px;border-radius:50%;background:oklch(0.68 0.17 25)"></span>
+                <span>${tr("Sprechtaste")}</span>
+                <span style="font-weight:500;opacity:.7">alt+y</span>
+              </button>`}
+              <span style="flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right;font-size:11.5px;color:${C.faint};padding:0 6px">${tr("Enter schickt · Shift+Enter neue Zeile")}</span>
+              <button type="button" class="hv5" onClick=${() => this.setState({ deep: !st.deep })} disabled=${off} title=${tr("Die nächste Antwort kommt von Opus statt Sonnet: gründlicher, langsamer, braucht mehr vom Abo. Gilt nur für diese eine Nachricht.")} style="flex:none;white-space:nowrap;display:flex;align-items:center;gap:7px;height:32px;padding:0 13px 0 11px;border-radius:999px;border:0;background:${st.deep ? col("mem", 0.28) : "oklch(1 0 0 / 0.05)"};color:${st.deep ? soft("mem") : C.dim};font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;transition:background .3s,color .3s">
+                <span style="width:8px;height:8px;border-radius:50%;background:${st.deep ? col("mem") : C.faint}"></span>
+                <span>Opus</span>
+              </button>
+              ${canStop ? html`
+              <button type="button" onClick=${() => post("/cancel")} title=${busy ? tr("Stopp — hört auf zu denken und antwortet nicht. Deine Nachricht bleibt bekannt.") : tr("Stopp — hört sofort auf zu reden.")} style="flex:none;margin-left:auto;width:40px;height:40px;border-radius:50%;border:0;background:${col("ohr")};cursor:pointer;display:grid;place-items:center;animation:${fadeAnim}">
+                <span style="width:13px;height:13px;border-radius:3px;background:oklch(0.98 0 0)"></span>
+              </button>` : html`
+              <button type="submit" title=${tr("Senden")} disabled=${!canSend} style="flex:none;margin-left:auto;width:40px;height:40px;border-radius:50%;border:0;background:${canSend ? col(theme[0]) : "oklch(1 0 0 / 0.07)"};color:${canSend ? C.dark : C.faint};font:inherit;font-size:18px;font-weight:700;line-height:1;cursor:pointer;transform:scale(${canSend ? 1 : 0.9});transition:color .35s,transform .45s cubic-bezier(.3,1.6,.5,1)">↑</button>`}
+            </div>
+          </form>
+        </div>
+      </section>
+
+      ${st.cols.notes && html`
+        ${handle("notes")}
+        <aside style="width:${wv("notes")};${panel}">
+          <div style="display:flex;flex-direction:column;gap:1px;padding:14px 12px 4px 18px;line-height:1.35">
+            <span style="font-size:15px;font-weight:700">${tr("Notizen")} <span style="font-size:12px;font-weight:500;color:${C.faint}">${thoughtList.length}</span></span>
+            <span style="font-size:12px;color:${C.faint}">${tr("was {bot} bei Meldungen denkt, ohne es zu sagen", { bot })}</span>
+          </div>
+
+          ${html`
+            <div style="flex:1;min-height:0;overflow-y:auto;padding:10px 12px 18px;display:flex;flex-direction:column;gap:6px;${fade(12)}">
+              ${!thoughtList.length && html`<div style="padding:8px 6px;color:${C.faint}">${F.watch ? tr("Noch nichts beobachtet.") : tr("Beobachten ist aus — hier landen nur Notizen zu Weckern.")}</div>`}
+              ${thoughtList.map((t) => html`
+                <div key=${t.key} style="display:flex;flex-direction:column;gap:5px;padding:12px 14px;border-radius:18px;background:${t.bg};animation:${t.anim};opacity:${t.opacity};transition:background .8s">
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <span style="flex:none;width:8px;height:8px;border-radius:50%;background:${t.dot}"></span>
+                    <span style="min-width:0;font-size:12px;font-weight:600;color:${t.chipFg};overflow-wrap:anywhere">${t.sawText}</span>
+                    <span style="flex:1"></span>
+                    <span style="font-size:11.5px;color:${C.faint};white-space:nowrap">${t.time}</span>
+                  </div>
+                  <p style="margin:0;color:${t.fg};white-space:pre-wrap;overflow-wrap:anywhere;text-wrap:pretty;transition:color .5s">${fmt(t.thought)}</p>
+                  ${t.spoke && html`<span style="font-size:11.5px;font-weight:600;color:oklch(0.84 0.12 355)">${tr("hat es gesagt")}</span>`}
+                  ${t.testing && html`<span style="font-size:11.5px;font-weight:600;color:oklch(0.80 0.11 280)">${tr("Test")}</span>`}
+                </div>`)}
+            </div>`}
+        </aside>`}
+
+      ${st.cols.act && html`
+        ${handle("act")}
+        <aside style="width:${wv("act")};${panel}">
+          <div style="display:flex;align-items:center;gap:8px;padding:14px 12px 4px 18px">
+            <div style="display:flex;flex-direction:column;gap:1px;min-width:0;line-height:1.35">
+              <span style="font-size:15px;font-weight:700">${tr("Aktivität")}</span>
+              <span style="font-size:12px;color:${busy ? soft(actKey(d)) : C.faint};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${actStatus}</span>
+            </div>
+            <span style="flex:1"></span>
+            <button class="hv5" onClick=${() => this.remember()} disabled=${busy || off || st.merken} title=${tr("Trägt alles Gesagte seit dem letzten Lauf ins Gedächtnis ein. Dauert ein paar Minuten, solange kommt keine Antwort.")} style="flex:none;display:flex;align-items:center;gap:7px;height:32px;padding:0 13px 0 11px;border-radius:999px;border:0;background:${remembering ? col("mem", 0.28) : col("mem", 0.13)};color:oklch(0.80 0.11 280);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;opacity:${(busy && !remembering) || st.merken ? 0.5 : 1};transition:background .4s">
+              <span style="width:8px;height:8px;border-radius:50%;background:oklch(0.70 0.14 280)"></span>
+              <span>${remembering ? tr("merkt sich…") : tr("Merken")}</span>
+            </button>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px;padding:8px 12px 4px">
+            ${fdefs.map(([id, lbl, k]) => { const on = fl === id; return html`
+              <button key=${id} class="hv4" onClick=${() => this.setState({ filter: id })} style="display:flex;align-items:center;gap:6px;height:28px;padding:0 11px 0 10px;border-radius:999px;border:0;background:${on ? (k ? col(k, 0.18) : "oklch(1 0 0 / 0.1)") : "oklch(1 0 0 / 0.035)"};color:${on ? (k ? soft(k) : C.ink) : C.dim};font:inherit;font-size:12px;font-weight:600;cursor:pointer;transition:background .3s,color .3s">
+                ${k && html`<span style="width:7px;height:7px;border-radius:50%;background:${col(k)}"></span>`}
+                <span>${lbl}</span>
+              </button>`; })}
+          </div>
+          <div style="flex:1;min-height:0;overflow-y:auto;padding:8px 12px 18px;display:flex;flex-direction:column;gap:6px;${fade(10)}">
+            ${!actList.length && html`<div style="padding:8px 6px;color:${C.faint}">${tr("Nichts in dieser Auswahl.")}</div>`}
+            ${actList.map((g) => html`
+              <div key=${g.key} style="display:flex;flex-direction:column;gap:6px;padding:12px 14px;border-radius:18px;background:${g.bg};animation:${g.anim};opacity:${g.opacity};transition:background .8s">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <span style="flex:none;width:8px;height:8px;border-radius:50%;background:${g.dot}"></span>
+                  <span style="min-width:0;font-size:12px;font-weight:600;color:${g.labelFg};overflow-wrap:anywhere">${g.label}</span>
+                  ${g.live && dots(actKey(d))}
+                  <span style="flex:1"></span>
+                  <span style="font-size:11.5px;color:${C.faint};white-space:nowrap">${g.time}</span>
+                </div>
+                ${g.steps.map((x) => html`
+                  <div key=${x.key} style="display:grid;grid-template-columns:7px minmax(0,1fr);gap:10px;align-items:baseline;font-size:12.5px;animation:${x.anim}">
+                    <span style="width:7px;height:7px;border-radius:50%;background:${x.dot};transform:translateY(-1px)"></span>
+                    <span style="min-width:0;color:${C.dim};overflow-wrap:anywhere"><span style="color:${x.verbFg};font-weight:600">${x.verb}</span> ${x.on}</span>
+                  </div>`)}
+              </div>`)}
+          </div>
+        </aside>`}
+
+    </main>
+  </div>
+
+  ${st.lightbox && html`
+    <div onClick=${() => this.setState({ lightbox: null })} style="position:fixed;inset:0;z-index:31;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:28px;background:oklch(0.08 0.005 320 / 0.86);backdrop-filter:blur(8px);cursor:zoom-out;animation:${fadeAnim}">
+      ${img(st.lightbox.url, st.lightbox.name, `max-width:100%;max-height:calc(100vh - 100px);border-radius:20px;object-fit:contain;box-shadow:0 30px 70px oklch(0.05 0 0 / 0.6);animation:${riseAnim}`)}
+      <span style="font-size:12.5px;color:${C.dim}">${st.lightbox.name}</span>
+    </div>`}
+  ${st.confirm && html`
+    <div onClick=${() => this.setState({ confirm: false })} style="position:fixed;inset:0;z-index:30;display:grid;place-items:center;padding:20px;background:oklch(0.08 0.005 320 / 0.6);backdrop-filter:blur(6px);animation:${fadeAnim}">
+      <div onClick=${(e) => e.stopPropagation()} style="width:100%;max-width:380px;display:flex;flex-direction:column;gap:18px;padding:24px;border-radius:28px;background:oklch(0.215 0.012 320);box-shadow:0 30px 70px oklch(0.05 0 0 / 0.6);animation:${riseAnim}">
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <span style="font-size:18px;font-weight:700">${tr("{bot} beenden?", { bot })}</span>
+          <span style="color:${C.dim}">${tr("Der laufende Zug wird noch fertig. Neu starten geht über start.vbs.")}</span>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button onClick=${() => this.setState({ confirm: false })} style="height:38px;padding:0 16px;border-radius:999px;border:0;background:oklch(1 0 0 / 0.07);color:${C.ink};font:inherit;font-size:13px;font-weight:600;cursor:pointer">${tr("Abbrechen")}</button>
+          <button onClick=${() => {
+            // Nicht selbst beenden: die Bitte geht in die Schlange, die Uhr hoert nach dem
+            // laufenden Zug auf -- mitten im Denken abzuwuergen hiesse ein halber Zug im Faden.
+            this.setState({ confirm: false, stopping: true }); post("/stop");
+          }} style="height:38px;padding:0 16px;border-radius:999px;border:0;background:oklch(0.68 0.17 25);color:${C.dark};font:inherit;font-size:13px;font-weight:700;cursor:pointer">${tr("Beenden")}</button>
+        </div>
+      </div>
+    </div>`}
+  ${st.setup && html`
+    <div onClick=${() => this.closeSetup()} style="position:fixed;inset:0;z-index:30;display:grid;place-items:center;padding:20px;background:oklch(0.08 0.005 320 / 0.6);backdrop-filter:blur(6px);animation:${fadeAnim}">
+      <div onClick=${(e) => e.stopPropagation()} style="width:100%;max-width:520px;max-height:calc(100vh - 40px);overflow-y:auto;display:flex;flex-direction:column;gap:22px;padding:24px;border-radius:28px;background:oklch(0.215 0.012 320);box-shadow:0 30px 70px oklch(0.05 0 0 / 0.6);animation:${riseAnim}">
+        <div style="display:flex;align-items:center;gap:12px">
+          ${orb(30, "idle")}
+          <div style="display:flex;flex-direction:column;line-height:1.35">
+            <span style="font-size:18px;font-weight:700">${tr("Einstellungen")}</span>
+            <span style="font-size:12.5px;color:${C.dim}">${tr("Was du hier umstellst, gilt ab der nächsten Nachricht.")}</span>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:8px">
+          ${label(tr("Sprache"))}
+          <select disabled=${st.setupBusy} onChange=${(e) => this.configure({ language: e.target.value })} style="${field};cursor:pointer;appearance:auto">
+            ${Object.entries(cfg.languages || {}).map(([k, v]) => html`<option key=${k} value=${k} selected=${cfg.language === k}>${v}</option>`)}
+          </select>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:8px">
+          ${label(tr("Wie soll dein Assistent heißen?"))}
+          <form onSubmit=${(e) => { e.preventDefault(); this.configure({ assistant: (st.botDraft ?? "").trim() }); }} style="display:flex;gap:8px">
+            <input value=${st.botDraft ?? bot} onInput=${(e) => this.setState({ botDraft: e.target.value })} maxlength="20" title=${tr("Ein Wort — es ist auch das Weckwort fürs Mikrofon.")} style="flex:1;${field}" />
+            <button type="submit" disabled=${st.setupBusy || st.botDraft == null} style=${btn(st.botDraft == null ? "oklch(1 0 0 / 0.06)" : col("bot"), st.botDraft == null ? C.faint : C.dark)}>${tr("Speichern")}</button>
+          </form>
+          <span style="font-size:12px;color:${C.faint}">${tr("Ein Wort, 2 bis 20 Buchstaben. Ist auch das Weckwort fürs Mikrofon. Leer lassen und speichern setzt die Vorgabe zurück.")}</span>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:8px">
+          ${label(tr("Wie soll {bot} dich nennen?", { bot }))}
+          <form onSubmit=${(e) => { e.preventDefault(); this.configure({ name: st.nameDraft ?? cfg.name ?? "" }); }} style="display:flex;gap:8px">
+            <input value=${st.nameDraft ?? cfg.name ?? ""} onInput=${(e) => this.setState({ nameDraft: e.target.value })} placeholder=${me} maxlength="40" style="flex:1;${field}" />
+            <button type="submit" disabled=${st.setupBusy || st.nameDraft == null} style=${btn(st.nameDraft == null ? "oklch(1 0 0 / 0.06)" : col("bot"), st.nameDraft == null ? C.faint : C.dark)}>${tr("Speichern")}</button>
+          </form>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:10px">
+          ${label(tr("Stimme"))}
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            ${(cfg.voices || []).map((v) => html`
+              <button key=${v} class="hv5" onClick=${() => this.configure({ voice: v })} disabled=${st.setupBusy} style=${btn(cfg.voice === v ? col("bot", 0.2) : "oklch(1 0 0 / 0.05)", cfg.voice === v ? soft("bot") : C.dim)}>${tr(VOICE_LABEL[v] || v)}</button>`)}
+          </div>
+          ${cfg.azure ? html`
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <span style="flex:1;min-width:180px;font-size:13px;color:${C.dim}">${tr("Azure-Konto eingerichtet")}${cfg.region ? " · " + tr("Region") + " " + cfg.region : ""}.</span>
+              <button class="hv5" onClick=${() => this.voiceTest()} disabled=${st.setupBusy} style=${btn(col("bot", 0.16), soft("bot"))}>${tr("Stimme testen")}</button>
+              <button class="hvRed" onClick=${() => this.configure({ azure_clear: true })} disabled=${st.setupBusy} style=${btn("transparent", "oklch(0.80 0.13 25)")}>${tr("Entfernen")}</button>
+            </div>` : html`
+            <span style="font-size:13px;color:${C.dim};text-wrap:pretty">${tr("Ohne Azure-Konto bleibt {bot} stumm und antwortet nur hier im Fenster. Ein kostenloses Konto reicht (500.000 Zeichen im Monat frei): im Azure-Portal einen „Speech“-Dienst anlegen, dann unter „Schlüssel und Endpunkt“ einen Schlüssel und die Region kopieren.", { bot })}</span>
+            <form onSubmit=${(e) => { e.preventDefault(); this.configure({ azure_key: st.keyDraft, azure_region: st.regionDraft ?? "" }); }} style="display:flex;gap:8px;flex-wrap:wrap">
+              <input type="password" autocomplete="off" value=${st.keyDraft} onInput=${(e) => this.setState({ keyDraft: e.target.value })} placeholder=${tr("Schlüssel")} style="flex:2 1 200px;${field}" />
+              <input value=${st.regionDraft ?? ""} onInput=${(e) => this.setState({ regionDraft: e.target.value })} placeholder=${tr("Region")} title=${tr("z.B. westeurope oder germanywestcentral")} style="flex:1 1 140px;${field}" />
+              ${(() => { const ok = !st.setupBusy && st.keyDraft.trim() && (st.regionDraft || "").trim(); return html`
+              <button type="submit" disabled=${!ok} style=${btn(ok ? col("bot") : "oklch(1 0 0 / 0.06)", ok ? C.dark : C.faint)}>${tr("Speichern")}</button>`; })()}
+            </form>`}
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:10px">
+          ${label("Discord")}
+          ${cfg.discord_ready ? html`
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <span style="flex:1;min-width:180px;font-size:13px;color:${C.dim}">${tr("Bot eingerichtet für ID {id}", { id: cfg.discord_user })} · ${tr(cfg.discord === "aus" ? "Schalter unten ist aus" : cfg.discord)}.</span>
+              <button class="hvRed" onClick=${() => this.configure({ discord_clear: true })} disabled=${st.setupBusy} style=${btn("transparent", "oklch(0.80 0.13 25)")}>${tr("Entfernen")}</button>
+            </div>` : html`
+            <span style="font-size:13px;color:${C.dim};text-wrap:pretty">${tr("Mit einem eigenen Discord-Bot kannst du {bot} auch per DM schreiben. Im Discord Developer Portal eine Anwendung anlegen, unter „Bot“ den Token kopieren und den Bot über „OAuth2“ (Scope „bot“) auf einen Server einladen, auf dem du bist. Deine eigene ID: in Discord den Entwicklermodus einschalten, Rechtsklick auf dich, „ID kopieren“.", { bot })}</span>
+            <form onSubmit=${(e) => { e.preventDefault(); this.configure({ discord_token: st.tokenDraft, discord_user: st.userDraft ?? "" }); }} style="display:flex;gap:8px;flex-wrap:wrap">
+              <input type="password" autocomplete="off" value=${st.tokenDraft} onInput=${(e) => this.setState({ tokenDraft: e.target.value })} placeholder=${tr("Bot-Token")} style="flex:2 1 200px;${field}" />
+              <input value=${st.userDraft ?? ""} onInput=${(e) => this.setState({ userDraft: e.target.value })} placeholder=${tr("Deine Discord-ID")} style="flex:1 1 160px;${field}" />
+              ${(() => { const ok = !st.setupBusy && st.tokenDraft.trim() && (st.userDraft || "").trim(); return html`
+              <button type="submit" disabled=${!ok} style=${btn(ok ? col("bot") : "oklch(1 0 0 / 0.06)", ok ? C.dark : C.faint)}>${tr("Speichern")}</button>`; })()}
+            </form>`}
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:8px">
+          ${label(tr("Mikrofon"))}
+          <select disabled=${st.setupBusy || !cfg.whisper} onChange=${(e) => { const v = e.target.value;
+              this.configure(v === "__aus__" ? { features: { ear: false } } : { mic: v, features: { ear: true } }); }}
+            style="${field};cursor:pointer;appearance:auto">
+            <option value="__aus__" selected=${!F.ear}>${tr("Aus — {bot} hört nichts und spricht nicht laut", { bot })}</option>
+            <option value="" selected=${F.ear && !cfg.mic}>${tr("Windows-Standard")}</option>
+            ${(cfg.mics || []).map((m) => html`<option key=${m} value=${m} selected=${F.ear && cfg.mic === m}>${m}</option>`)}
+          </select>
+          ${F.ear && (cfg.models || []).length > 1 && html`
+            <select disabled=${st.setupBusy} onChange=${(e) => this.configure({ whisper_model: e.target.value })} title=${tr("Größere Modelle hören genauer, brauchen auf der CPU aber länger für jeden Satz.")} style="${field};cursor:pointer;appearance:auto">
+              ${cfg.models.map((m) => html`<option key=${m} value=${m} selected=${cfg.model === m}>${tr("Sprachmodell:")} ${m}</option>`)}
+            </select>`}
+          <span style="font-size:12px;color:${C.faint};text-wrap:pretty">${cfg.whisper
+            ? tr("Hört auf „{bot}“ oder die Sprechtaste Alt+Y. Whisper läuft lokal, kein Ton verlässt den Rechner.", { bot })
+              + " " + tr("Auf Laptops empfehlen wir, das Mikrofon auszulassen: Whisper hört ständig mit und belastet Akku und Prozessor.")
+            : tr("Whisper ist noch nicht installiert: tools\\install-whisper.ps1 einmal ausführen, dann neu starten.")}</span>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:6px">
+          ${label(tr("Start"))}
+          <button class="hv4" disabled=${st.setupBusy} onClick=${() => this.configure({ autostart: !cfg.autostart })} style="display:grid;grid-template-columns:minmax(0,1fr) 42px;gap:14px;align-items:center;padding:12px 14px;border-radius:18px;border:0;background:${cfg.autostart ? col("bot", 0.1) : "oklch(1 0 0 / 0.035)"};color:${C.ink};font:inherit;text-align:left;cursor:pointer">
+            <span style="display:flex;flex-direction:column;gap:2px;min-width:0">
+              <span style="font-size:13.5px;font-weight:600">${tr("Mit Windows starten")}</span>
+              <span style="font-size:12.5px;color:${C.dim}">${tr("Legt eine Verknüpfung in den Autostart-Ordner. Das Fenster geht beim Anmelden mit auf.")}</span>
+            </span>
+            <span style="position:relative;width:42px;height:24px;border-radius:999px;background:${cfg.autostart ? col("bot") : "oklch(1 0 0 / 0.12)"};transition:background .3s">
+              <span style="position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:oklch(0.98 0 0);transform:translateX(${cfg.autostart ? "18px" : "0"});transition:transform .35s cubic-bezier(.3,1.4,.5,1)"></span>
+            </span>
+          </button>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:4px 2px">
+            <span style="flex:1;min-width:180px;font-size:12.5px;color:${C.dim}">${st.desktopDone ? tr("Verknüpfung liegt auf dem Desktop.") : tr("Eine Verknüpfung „{bot}“ auf den Desktop legen.", { bot })}</span>
+            <button class="hv5" onClick=${() => this.desktop()} disabled=${st.setupBusy} style=${btn(col("bot", 0.16), soft("bot"))}>${tr("Auf den Desktop")}</button>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:6px">
+          ${label(tr("Was {bot} darf", { bot }))}
+          ${FEATURES.filter(([id]) => id !== "discord" || cfg.discord_ready).map(([id, name, what]) => {
+            const on = !!F[id], blocked = id === "ear" && !cfg.whisper && !on;
+            return html`
+              <button key=${id} class="hv4" disabled=${st.setupBusy || blocked} onClick=${() => this.configure({ features: { [id]: !on } })} style="display:grid;grid-template-columns:minmax(0,1fr) 42px;gap:14px;align-items:center;padding:12px 14px;border-radius:18px;border:0;background:${on ? col("bot", 0.1) : "oklch(1 0 0 / 0.035)"};color:${C.ink};font:inherit;text-align:left;cursor:pointer;opacity:${blocked ? 0.55 : 1}">
+                <span style="display:flex;flex-direction:column;gap:2px;min-width:0">
+                  <span style="font-size:13.5px;font-weight:600">${tr(name)}</span>
+                  <span style="font-size:12.5px;color:${C.dim};text-wrap:pretty">${blocked ? tr("Whisper ist noch nicht installiert: tools\\install-whisper.ps1 einmal ausführen, dann neu starten.") : tr(what)}</span>
+                </span>
+                <span style="position:relative;width:42px;height:24px;border-radius:999px;background:${on ? col("bot") : "oklch(1 0 0 / 0.12)"};transition:background .3s">
+                  <span style="position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:oklch(0.98 0 0);transform:translateX(${on ? "18px" : "0"});transition:transform .35s cubic-bezier(.3,1.4,.5,1)"></span>
+                </span>
+              </button>`;
+          })}
+        </div>
+
+        ${st.setupMsg && html`<span style="font-size:13px;font-weight:600;color:oklch(0.84 0.11 25)">${st.setupMsg}</span>`}
+        <div style="display:flex;justify-content:flex-end">
+          <button onClick=${() => this.closeSetup()} style=${btn("oklch(1 0 0 / 0.07)", C.ink)}>${tr("Fertig")}</button>
+        </div>
+      </div>
+    </div>`}
+</div>`;
+  }
+}
+
+render(html`<${App} />`, document.getElementById("app"));
+</script>
+</body>
+</html>

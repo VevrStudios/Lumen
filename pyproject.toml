@@ -1,0 +1,24 @@
+[project]
+name = "lumen"
+version = "0.1.0"
+requires-python = ">=3.11"
+license = "GPL-3.0-or-later"
+# The whole dependency budget. Everything else is stdlib until stdlib demonstrably
+# does not reach -- Win32 included, via ctypes and winreg.
+#
+# claude-agent-sdk, not anthropic: the Agent SDK runs on the Claude Code login and
+# therefore on the subscription, while an ANTHROPIC_API_KEY bills the API balance
+# separately. It bundles the Claude Code binary, so this is the only install.
+#
+# One thing lives outside this list and is named here so nobody discovers it by accident:
+# `tools/whisper/` holds the prebuilt CPU whisper.cpp (`tools/install-whisper.ps1`). It is
+# not a Python package and never enters this file -- but it is a real dependency of the
+# microphone, and only needed with "Zuhören" switched on.
+dependencies = ["claude-agent-sdk"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["lumen*"]
