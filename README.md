@@ -111,6 +111,12 @@ self-check names any key that's missing.
 The window runs at <http://127.0.0.1:8770> and only answers requests from its own page on
 this computer.
 
+## Community
+
+Questions, ideas, bugs, or showing off what you built on top of Lumen:
+[join the Discord](https://discord.gg/KVgsq4MGWa). Issues and pull requests here on GitHub
+are welcome too.
+
 ## License
 
 Copyright (C) 2026 Vevr Studios (Minerib)
